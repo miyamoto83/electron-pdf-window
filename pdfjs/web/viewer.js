@@ -7249,7 +7249,8 @@ var pdfjsWebLibs;
           }
           var pagesOverview = this.pdfViewer.getPagesOverview();
           var printContainer = this.appConfig.printContainer;
-          var printService = PDFPrintServiceFactory.instance.createPrintService(this.pdfDocument, pagesOverview, printContainer);
+          var printResolution = AppOptions.get("printResolution");
+          var printService = PDFPrintServiceFactory.instance.createPrintService(this.pdfDocument, pagesOverview, printContainer, printResolution);
           this.printService = printService;
           this.forceRendering();
           printService.layout();
@@ -8231,13 +8232,12 @@ var pdfjsWebLibs;
       var activeService = null;
       // Using one canvas for all paint operations -- painting one canvas at a time.
       var scratchCanvas = null;
-      function renderPage(pdfDocument, pageNumber, size, wrapper) {
+      function renderPage(pdfDocument, pageNumber, size, wrapper, printResolution) {
         if (!scratchCanvas) {
           scratchCanvas = document.createElement('canvas');
         }
         // The size of the canvas in pixels for printing.
-        var PRINT_RESOLUTION = 150;
-        var PRINT_UNITS = PRINT_RESOLUTION / 72.0;
+        var PRINT_UNITS = printResolution / 72.0;
         scratchCanvas.width = Math.floor(size.width * PRINT_UNITS);
         scratchCanvas.height = Math.floor(size.height * PRINT_UNITS);
         // The physical size of the img as specified by the PDF document.
@@ -8282,12 +8282,13 @@ var pdfjsWebLibs;
           });
         });
       }
-      function PDFPrintService(pdfDocument, pagesOverview, printContainer) {
+      function PDFPrintService(pdfDocument, pagesOverview, printContainer, printResolution) {
         this.pdfDocument = pdfDocument;
         this.pagesOverview = pagesOverview;
         this.printContainer = printContainer;
         this.wrappers = [];
         this.currentPage = -1;
+        this.printResolution = printResolution || 150;
       }
       PDFPrintService.prototype = {
         layout: function () {
@@ -8360,7 +8361,7 @@ var pdfjsWebLibs;
             }
             var index = this.currentPage;
             renderProgress(index, pageCount);
-            renderPage(this.pdfDocument, index + 1, this.pagesOverview[index], this.wrappers[index]).then(function () {
+            renderPage(this.pdfDocument, index + 1, this.pagesOverview[index], this.wrappers[index], this.printResolution).then(function () {
               renderNextPage(resolve, reject);
             }, reject);
           }.bind(this);
@@ -8470,11 +8471,11 @@ var pdfjsWebLibs;
       }
       PDFPrintServiceFactory.instance = {
         supportsPrinting: true,
-        createPrintService: function (pdfDocument, pagesOverview, printContainer) {
+        createPrintService: function (pdfDocument, pagesOverview, printContainer, printResolution) {
           if (activeService) {
             throw new Error('The print service is created and active.');
           }
-          activeService = new PDFPrintService(pdfDocument, pagesOverview, printContainer);
+          activeService = new PDFPrintService(pdfDocument, pagesOverview, printContainer, printResolution);
           return activeService;
         }
       };
@@ -8598,9 +8599,30 @@ function getViewerConfiguration() {
     debuggerScriptPath: './debugger.js'
   };
 }
+
+// You can set application options by calling executeJavaScript("window.AppOptions.set(key, value);"");
+var AppOptions = function(){};
+const defaultOptions = {
+  printResolution : 150
+};
+const userOptions = Object.create(null);
+AppOptions.get = function(key) {
+  const userOption = userOptions[key];
+  if (userOptions !== undefined)
+    return userOption;
+  const defaultOption = defaultOptions[key];
+  if (defaultOptions !== undefined)
+    return defaultOption;
+  return undefined;
+};
+AppOptions.set = function(key, value) {
+  userOptions[key] = value;
+};
+
 function webViewerLoad() {
   var config = getViewerConfiguration();
   window.PDFViewerApplication = pdfjsWebLibs.pdfjsWebApp.PDFViewerApplication;
+  window.AppOptions = AppOptions;
   pdfjsWebLibs.pdfjsWebApp.PDFViewerApplication.run(config);
 }
 document.addEventListener('DOMContentLoaded', webViewerLoad, true);
